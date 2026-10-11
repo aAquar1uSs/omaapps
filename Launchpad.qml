@@ -53,8 +53,8 @@ Item {
   readonly property var pages: Paging.paginate(root.apps, root.perPage)
 
   function open(payloadJson) {
-    root.filterText = ""
-    root.selectedIndex = -1
+    searchInput.text = ""
+    root.setFilter("")
     root.swipeAcc = 0
     swipeEnd.stop()
     root.refresh()
@@ -63,7 +63,7 @@ Item {
     root.windowShown = true
     root.goToPage(0, false)
     intro.restart()
-    Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+    Qt.callLater(function() { searchInput.forceActiveFocus() })
   }
 
   // Called by the shell on hide, and by dismiss(); safe to call twice.
@@ -247,43 +247,6 @@ Item {
     }
 
     Item {
-      id: keyCatcher
-      anchors.fill: parent
-      enabled: root.opened
-      focus: true
-
-      Keys.onPressed: function(event) {
-        var key = event.key
-        if (key === Qt.Key_Escape) {
-          if (root.filterText) root.setFilter("")
-          else root.dismiss()
-        } else if (Util.editsFilter(event, root.filterText)) {
-          root.setFilter(Util.editedFilter(event, root.filterText))
-        } else if (key === Qt.Key_Left) {
-          root.moveSelection(-1, 0)
-        } else if (key === Qt.Key_Right) {
-          root.moveSelection(1, 0)
-        } else if (key === Qt.Key_Up) {
-          root.moveSelection(0, -1)
-        } else if (key === Qt.Key_Down) {
-          root.moveSelection(0, 1)
-        } else if (key === Qt.Key_PageUp) {
-          root.stepPage(-1)
-        } else if (key === Qt.Key_PageDown) {
-          root.stepPage(1)
-        } else if (key === Qt.Key_Return || key === Qt.Key_Enter) {
-          root.activateSelection()
-        } else if (event.text && event.text.length === 1 && event.text.charCodeAt(0) > 32 && event.text.charCodeAt(0) !== 127
-                   || event.text === " " && root.filterText) {
-          root.setFilter(root.filterText + event.text)
-        } else {
-          return
-        }
-        event.accepted = true
-      }
-    }
-
-    Item {
       id: content
       anchors.fill: parent
       enabled: root.opened
@@ -319,7 +282,14 @@ Item {
         radius: height / 2
         color: root.selectedBackground
         border.width: 1
-        border.color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.15)
+        border.color: searchInput.activeFocus && searchInput.text
+          ? Color.accent : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.15)
+
+        MouseArea {
+          anchors.fill: parent
+          cursorShape: Qt.IBeamCursor
+          onClicked: searchInput.forceActiveFocus()
+        }
 
         Row {
           anchors.centerIn: parent
@@ -336,16 +306,61 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
           }
 
-          Text {
+          Item {
             width: parent.width - glyph.width - parent.spacing
-            textFormat: Text.PlainText
-            text: root.filterText || "Search"
-            color: root.foreground
-            opacity: root.filterText ? 1 : 0.5
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.heading
-            elide: Text.ElideLeft
+            height: searchInput.implicitHeight
             anchors.verticalCenter: parent.verticalCenter
+
+            Text {
+              anchors.fill: parent
+              visible: searchInput.text.length === 0
+              textFormat: Text.PlainText
+              text: "Search"
+              color: root.foreground
+              opacity: 0.5
+              font: searchInput.font
+            }
+
+            // Holds keyboard focus the whole time the grid is open, so typing
+            // anywhere searches; grid navigation keys are taken first below.
+            TextInput {
+              id: searchInput
+              anchors.fill: parent
+              enabled: root.opened
+              color: root.foreground
+              selectionColor: Color.accent
+              selectedTextColor: Color.background
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.heading
+              selectByMouse: true
+              clip: true
+              onTextChanged: if (text !== root.filterText) root.setFilter(text)
+
+              Keys.onPressed: function(event) {
+                var key = event.key
+                if (key === Qt.Key_Escape) {
+                  if (searchInput.text) searchInput.text = ""
+                  else root.dismiss()
+                } else if (key === Qt.Key_Left) {
+                  root.moveSelection(-1, 0)
+                } else if (key === Qt.Key_Right) {
+                  root.moveSelection(1, 0)
+                } else if (key === Qt.Key_Up) {
+                  root.moveSelection(0, -1)
+                } else if (key === Qt.Key_Down) {
+                  root.moveSelection(0, 1)
+                } else if (key === Qt.Key_PageUp) {
+                  root.stepPage(-1)
+                } else if (key === Qt.Key_PageDown) {
+                  root.stepPage(1)
+                } else if (key === Qt.Key_Return || key === Qt.Key_Enter) {
+                  root.activateSelection()
+                } else {
+                  return
+                }
+                event.accepted = true
+              }
+            }
           }
         }
       }

@@ -6,7 +6,7 @@ Flip between pages, type to search, and click an app to launch it.
 
 - Full-screen icon grid, sized to your screen (up to 8 × 6 per page)
 - Pages: two-finger horizontal swipe, mouse wheel, PageUp/PageDown, or click the dots
-- Type anywhere to search by name, generic name, keywords or desktop id; Enter launches the first match
+- Type anywhere (or click the search field) to search by name, generic name, keywords or desktop id; paste works; Enter launches the first match
 - Arrow keys move a highlight; Enter launches it
 - Esc clears the search, then closes; clicking empty space or launching an app also closes
 - Hides the same apps as the Omarchy launcher (NoDisplay, `launcher.hides`, entries hidden for this desktop)
