@@ -46,27 +46,27 @@ test("moveIndex: vertical moves stay on the current page", () => {
   assert.equal(Paging.moveIndex(3, 0, 1, 2, 3, 5), 4)
 })
 
-test("swipe: one page per gesture, inertia ignored until it settles", () => {
-  const opts = { threshold: 100, cooldown: 300, idle: 150 }
-  let s = Paging.newSwipe()
-  let r = Paging.swipe(s, -60, 0, opts); s = r.state
-  assert.equal(r.step, 0)
-  r = Paging.swipe(s, -60, 10, opts); s = r.state
-  assert.equal(r.step, 1)
-  // Inertia keeps arriving: swallowed, and it keeps the lock alive.
-  r = Paging.swipe(s, -200, 200, opts); s = r.state
-  assert.equal(r.step, 0)
-  r = Paging.swipe(s, -200, 450, opts); s = r.state
-  assert.equal(r.step, 0)
-  // After a quiet cooldown, the opposite direction pages back.
-  r = Paging.swipe(s, 120, 900, opts); s = r.state
-  assert.equal(r.step, -1)
+// Recorded on a real touchpad: a two-finger swipe is a ~100-150 ms burst of
+// wheel events ~8 ms apart, summing to |1000..3600|, with no kinetic tail.
+// The grid follows the fingers during the burst and commits on release.
+
+test("gestureStep: commits a page past the threshold, positive is next", () => {
+  assert.equal(Paging.gestureStep(1200, 120), 1)
+  assert.equal(Paging.gestureStep(-1200, 120), -1)
+  assert.equal(Paging.gestureStep(120, 120), 1)
+  assert.equal(Paging.gestureStep(80, 120), 0)
+  assert.equal(Paging.gestureStep(-80, 120), 0)
 })
 
-test("swipe: small scrolls separated by idle gaps never add up", () => {
-  const opts = { threshold: 100, cooldown: 300, idle: 150 }
-  let s = Paging.newSwipe()
-  let r = Paging.swipe(s, -60, 0, opts); s = r.state
-  r = Paging.swipe(s, -60, 500, opts); s = r.state
-  assert.equal(r.step, 0)
+test("dragOffset follows the fingers, capped at one page", () => {
+  assert.equal(Paging.dragOffset(1000, 0.4, 1000, 0, 3), 400)
+  assert.equal(Paging.dragOffset(-1000, 0.4, 1000, 1, 3), -400)
+  assert.equal(Paging.dragOffset(5000, 0.4, 1000, 0, 3), 1000)
+})
+
+test("dragOffset rubber-bands past the first and last page", () => {
+  assert.equal(Paging.dragOffset(-1000, 0.4, 1000, 0, 3), -100)
+  assert.equal(Paging.dragOffset(1000, 0.4, 1000, 2, 3), 100)
+  assert.equal(Paging.dragOffset(1000, 0.4, 1000, 0, 1), 100)
+  assert.equal(Paging.dragOffset(1000, 0.4, 1000, 0, 0), 100)
 })

@@ -21,19 +21,24 @@ Item {
   property var manifest: null
 
   property bool opened: false
+  // Window stays mapped after `opened` drops so the outro can play.
+  property bool windowShown: false
   property string filterText: ""
   property var apps: []
   property int selectedIndex: -1
   property int currentPage: 0
-  property var swipeState: Paging.newSwipe()
+  property real swipeAcc: 0
   property var configuredHides: ({})
   property var desktopHides: ({})
 
   readonly property string pluginId: (root.manifest && root.manifest.id) || "io.github.aaquar1uss.omaapps"
 
-  // Touchpad paging feel: wheel units to cross, quiet time that ends a
-  // gesture's kinetic tail, and the gap after which small scrolls reset.
-  readonly property var swipeOptions: ({ threshold: 100, cooldown: 280, idle: 160 })
+  // Touchpad paging feel. A swipe totals ~1000-3600 wheel units, so 120
+  // commits even a short one while a light brush springs back; the grid moves
+  // swipeGain px per unit under the fingers. A gesture ends after
+  // swipeEnd.interval ms without events (they come ~8 ms apart, no inertia).
+  readonly property real swipeThreshold: 120
+  readonly property real swipeGain: 0.45
 
   property color foreground: Color.menu.text
   property color selectedBackground: Color.menu.selectedBackground
@@ -50,20 +55,27 @@ Item {
   function open(payloadJson) {
     root.filterText = ""
     root.selectedIndex = -1
-    root.swipeState = Paging.newSwipe()
+    root.swipeAcc = 0
+    swipeEnd.stop()
     root.refresh()
+    outro.stop()
     root.opened = true
+    root.windowShown = true
     root.goToPage(0, false)
     intro.restart()
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
 
+  // Called by the shell on hide, and by dismiss(); safe to call twice.
   function close() {
     root.opened = false
+    if (!root.windowShown || outro.running) return
+    intro.stop()
+    outro.start()
   }
 
   function dismiss() {
-    root.opened = false
+    root.close()
     if (root.shell && typeof root.shell.hide === "function") root.shell.hide(root.pluginId)
   }
 
@@ -76,7 +88,11 @@ Item {
     var hidden = ({})
     for (var a in root.configuredHides) hidden[a] = true
     for (var b in root.desktopHides) hidden[b] = true
-    root.apps = Apps.list(DesktopEntries.applications.values || [], root.filterText, hidden)
+    var list = Apps.list(DesktopEntries.applications.values || [], root.filterText, hidden)
+    // Resolve icons once here, not in every tile binding: a page flip should
+    // not do dozens of icon-theme lookups on the UI thread.
+    for (var i = 0; i < list.length; i++) list[i].iconSource = root.iconFor(list[i].icon)
+    root.apps = list
     if (root.selectedIndex >= root.apps.length) root.selectedIndex = root.apps.length - 1
   }
 
@@ -95,11 +111,20 @@ Item {
     root.goToPage(0, false)
   }
 
+  function pageX(page) {
+    return pager.originX + page * pager.width
+  }
+
   function goToPage(page, animate) {
     var target = Paging.clampPage(page, root.pages.length)
     root.currentPage = target
-    if (animate === false) pager.positionViewAtIndex(target, ListView.Beginning)
-    pager.currentIndex = target
+    snap.stop()
+    if (animate === false) {
+      pager.contentX = root.pageX(target)
+    } else {
+      snap.to = root.pageX(target)
+      snap.start()
+    }
   }
 
   function stepPage(step) {
@@ -137,9 +162,35 @@ Item {
     // Touchpads report horizontal swipes on x; a mouse wheel only has y.
     var delta = event.angleDelta.x !== 0 ? event.angleDelta.x : event.angleDelta.y
     if (delta === 0) return
-    var result = Paging.swipe(root.swipeState, delta, Date.now(), root.swipeOptions)
-    root.swipeState = result.state
-    root.stepPage(result.step)
+    if (!swipeEnd.running) {
+      root.swipeAcc = 0
+      snap.stop()
+    }
+    root.swipeAcc += delta
+    pager.contentX = root.pageX(root.currentPage)
+      + Paging.dragOffset(root.swipeAcc, root.swipeGain, pager.width, root.currentPage, root.pages.length)
+    swipeEnd.restart()
+  }
+
+  function endSwipe() {
+    var step = Paging.gestureStep(root.swipeAcc, root.swipeThreshold)
+    root.swipeAcc = 0
+    if (step !== 0) root.stepPage(step)
+    else root.goToPage(root.currentPage, true)
+  }
+
+  Timer {
+    id: swipeEnd
+    interval: 100
+    onTriggered: root.endSwipe()
+  }
+
+  NumberAnimation {
+    id: snap
+    target: pager
+    property: "contentX"
+    duration: 300
+    easing.type: Easing.OutCubic
   }
 
   Connections {
@@ -176,7 +227,7 @@ Item {
 
   PanelWindow {
     id: panel
-    visible: root.opened
+    visible: root.windowShown
     anchors { top: true; bottom: true; left: true; right: true }
     color: "transparent"
     WlrLayershell.namespace: "omaapps"
@@ -185,6 +236,7 @@ Item {
     exclusionMode: ExclusionMode.Ignore
 
     Rectangle {
+      id: scrimLayer
       anchors.fill: parent
       color: root.scrim
     }
@@ -197,6 +249,7 @@ Item {
     Item {
       id: keyCatcher
       anchors.fill: parent
+      enabled: root.opened
       focus: true
 
       Keys.onPressed: function(event) {
@@ -233,14 +286,28 @@ Item {
     Item {
       id: content
       anchors.fill: parent
+      enabled: root.opened
       anchors.topMargin: Style.space(48)
       anchors.bottomMargin: Style.space(32)
       transformOrigin: Item.Center
 
       ParallelAnimation {
         id: intro
+        NumberAnimation { target: scrimLayer; property: "opacity"; from: 0; to: 1; duration: 160; easing.type: Easing.OutCubic }
         NumberAnimation { target: content; property: "opacity"; from: 0; to: 1; duration: 160; easing.type: Easing.OutCubic }
         NumberAnimation { target: content; property: "scale"; from: 1.06; to: 1; duration: 200; easing.type: Easing.OutCubic }
+      }
+
+      // Mirror of the intro: the grid grows slightly as it fades, then the
+      // window unmaps.
+      SequentialAnimation {
+        id: outro
+        ParallelAnimation {
+          NumberAnimation { target: scrimLayer; property: "opacity"; to: 0; duration: 180; easing.type: Easing.InCubic }
+          NumberAnimation { target: content; property: "opacity"; to: 0; duration: 150; easing.type: Easing.InCubic }
+          NumberAnimation { target: content; property: "scale"; to: 1.06; duration: 180; easing.type: Easing.InCubic }
+        }
+        ScriptAction { script: root.windowShown = false }
       }
 
       Rectangle {
@@ -294,18 +361,14 @@ Item {
         anchors.leftMargin: Math.round(parent.width * 0.08)
         anchors.rightMargin: Math.round(parent.width * 0.08)
         orientation: ListView.Horizontal
-        snapMode: ListView.SnapOneItem
-        highlightRangeMode: ListView.StrictlyEnforceRange
-        highlightMoveDuration: 260
-        boundsBehavior: Flickable.StopAtBounds
+        // Paging is driven by onWheel/goToPage (contentX), not by flicking.
+        interactive: false
         clip: true
         model: root.pages.length
-        onCurrentIndexChanged: root.currentPage = currentIndex
+        onWidthChanged: if (!snap.running) contentX = root.pageX(root.currentPage)
 
-        WheelHandler {
-          acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-          onWheel: function(event) { root.onWheel(event) }
-        }
+        // Keep every page built so swiping never creates tiles mid-gesture.
+        cacheBuffer: Math.max(0, pager.width * root.pages.length)
 
         delegate: Item {
           id: page
@@ -336,7 +399,7 @@ Item {
                 width: root.cellWidth
                 height: root.cellHeight
                 app: modelData
-                iconSource: root.iconFor(modelData.icon)
+                iconSource: modelData.iconSource
                 iconSize: root.iconSize
                 selected: root.selectedIndex === globalIndex
                 textColor: root.foreground
@@ -348,6 +411,15 @@ Item {
             }
           }
         }
+      }
+
+      // Takes wheel/touchpad scrolls before the ListView can: a Flickable
+      // would flick a few pixels and snap back to the same page. NoButton and
+      // no hover, so clicks and hover still reach the tiles underneath.
+      MouseArea {
+        anchors.fill: pager
+        acceptedButtons: Qt.NoButton
+        onWheel: function(wheel) { root.onWheel(wheel) }
       }
 
       Text {

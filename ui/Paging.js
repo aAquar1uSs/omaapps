@@ -49,20 +49,22 @@ function moveIndex(index, dx, dy, columns, rows, total) {
   return Math.max(0, Math.min(total - 1, next))
 }
 
-// Touchpad swipe recognizer over horizontal wheel deltas. A gesture pages
-// once when its accumulated delta crosses opts.threshold; the kinetic tail
-// that follows is swallowed until no event arrives for opts.cooldown ms.
-// Deltas separated by more than opts.idle ms start a fresh accumulation.
-// Negative delta (content pushed left) means the next page: step +1.
-function newSwipe() {
-  return { acc: 0, last: -Infinity, lockedUntil: -Infinity }
+// Touchpad paging. A two-finger swipe arrives as a short burst of wheel
+// deltas with no kinetic tail. While it lasts the grid follows the fingers
+// (dragOffset); once the burst ends the accumulated delta decides whether
+// to commit a page (gestureStep). Positive delta is the next page.
+
+// Pixels to shift the grid for an accumulated delta: proportional to the
+// swipe, capped at one page, and damped (rubber band) past either end.
+function dragOffset(acc, gain, width, page, pageCount) {
+  var offset = acc * gain
+  var pastEnd = (offset > 0 && page >= pageCount - 1) || (offset < 0 && page <= 0)
+  if (pastEnd) offset *= 0.25
+  return Math.max(-width, Math.min(width, offset))
 }
 
-function swipe(state, delta, now, opts) {
-  if (now < state.lockedUntil)
-    return { state: { acc: 0, last: now, lockedUntil: now + opts.cooldown }, step: 0 }
-  var acc = (now - state.last > opts.idle ? 0 : state.acc) + delta
-  if (Math.abs(acc) >= opts.threshold)
-    return { state: { acc: 0, last: now, lockedUntil: now + opts.cooldown }, step: acc < 0 ? 1 : -1 }
-  return { state: { acc: acc, last: now, lockedUntil: state.lockedUntil }, step: 0 }
+function gestureStep(acc, threshold) {
+  if (acc >= threshold) return 1
+  if (acc <= -threshold) return -1
+  return 0
 }
