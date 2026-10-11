@@ -1,7 +1,7 @@
 # omaapps
 
 A Launchpad-style app grid for [Omarchy](https://omarchy.org). Swipe up with
-four fingers and every installed app appears as a full-screen grid of icons.
+three fingers and every installed app appears as a full-screen grid of icons.
 Flip between pages, type to search, and click an app to launch it.
 
 - Full-screen icon grid, sized to your screen (up to 8 × 6 per page)
@@ -29,12 +29,16 @@ omarchy-shell shell toggle io.github.aaquar1uss.omaapps '{}'
 Add the gesture to `~/.config/hypr/input.lua`:
 
 ```lua
-hl.gesture({ fingers = 4, direction = "up", action = function() hl.exec_cmd("omarchy-shell -q shell summon io.github.aaquar1uss.omaapps '{}'") end })
-hl.gesture({ fingers = 4, direction = "down", action = function() hl.exec_cmd("omarchy-shell -q shell hide io.github.aaquar1uss.omaapps") end })
+hl.gesture({ fingers = 3, direction = "up", action = function() hl.exec_cmd("omarchy-shell -q shell summon io.github.aaquar1uss.omaapps '{}'") end })
+hl.gesture({ fingers = 3, direction = "down", action = function() hl.exec_cmd("omarchy-shell -q shell hide io.github.aaquar1uss.omaapps") end })
 hl.layer_rule({ match = { namespace = "^omaapps$" }, no_anim = true })
 ```
 
 Then check it with `hyprctl reload && hyprctl configerrors`.
+
+Already use three-finger swipes (for example `direction = "horizontal"` to switch
+workspaces)? Up and down don't clash with horizontal swipes, but if you want
+omaapps fully separate, use `fingers = 4` instead.
 
 Prefer a key? Bind one in `~/.config/hypr/bindings.lua`:
 

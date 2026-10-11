@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "author": "Oleksandr Panchenko",
   "license": "MIT",
-  "description": "Launchpad-style full-screen grid of your apps: swipe up with four fingers, flip pages, type to search, click to launch.",
+  "description": "Launchpad-style full-screen grid of your apps: swipe up with three fingers, flip pages, type to search, click to launch.",
   "kinds": [
     "overlay"
   ],
