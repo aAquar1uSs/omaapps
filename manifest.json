@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.aaquar1uss.omaapps",
+  "name": "omaapps",
+  "version": "0.1.0",
+  "author": "Oleksandr Panchenko",
+  "license": "MIT",
+  "description": "Launchpad-style full-screen grid of your apps: swipe up with four fingers, flip pages, type to search, click to launch.",
+  "kinds": [
+    "overlay"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "Launchpad.qml"
+  }
+}

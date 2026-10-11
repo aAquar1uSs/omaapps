@@ -25,7 +25,7 @@ Decisions made in chat:
 ## Design
 **Repo layout (`~/Projects/omaapps`)**
 ```
-manifest.json      kinds ["menu"], entryPoints.menu "Launchpad.qml", keepLoaded true
+manifest.json      kinds ["overlay"], entryPoints.overlay "Launchpad.qml", keepLoaded true
 Launchpad.qml      root Item: shell/manifest/opened, open/close/toggle, PanelWindow + key handling
 ui/AppTile.qml     icon (Image from appLibrary.iconSource) + elided name, hover/press states, click → launch
 ui/PageDots.qml    page indicator, clickable
@@ -94,3 +94,10 @@ The README documents this snippet for other users.
   - Esc and clicking empty space close it.
   - Disable then re-enable the plugin, restart the shell, and confirm it still works.
 - `hyprctl configerrors` is empty after the gesture edit.
+
+## Implementation note (2026-10-11): switched to the `overlay` kind
+Testing showed `shell.appLibrary` is always `null` for third-party plugins on Omarchy 4.0.4. `panelEntries` reach the loader through an `Instantiator`, where `modelData.manifest.kinds` is not a JS Array. This was confirmed with a standalone QML repro: `Array.isArray` returns false, but `indexOf` still works. As a result, `manifestHasKind()` returns false and the facade is never created.
+
+omaapps now declares `overlay` and reads `DesktopEntries` itself (`ui/Apps.js`, unit-tested). It filters NoDisplay entries, `launcher.hides`, and `hidden-entries.sh` output, and launches with `uwsm-app -- gtk-launch <id>.desktop`.
+
+Separately, Omarchy disables `decoration.blur` globally, so a blur layer rule is ineffective. The plugin uses an opaque themed scrim instead.
